@@ -14,6 +14,7 @@
 #include "util/delay.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define MAX_CMD_SIZE	20
 #define SLAVE_ADDRESS				0xD0 //1010 XXXX
@@ -24,6 +25,7 @@ u8* IntToString(s32 anInteger,u8 *str);
 u8 ConvertFromRTC(u8 num);
 void RTC_Read_Clock();
 u8 Random(u8 lower, u8 upper);;
+void int2HexStr(unsigned long n, char *outbuf);
 
 volatile u8 RX_Index = 0;
 volatile u8 doneFlag = 0;
@@ -51,8 +53,10 @@ int main(){
 	hour = ConvertFromRTC(hour);
 	srand(second^minute^hour);
 	u32 randNum = Random(1,250) * Random(1,250) * Random(1,250) * Random(1,250) + 0x12345678;
+	int2HexStr(randNum, tempStr);
+//	LCD_voidWriteString(tempStr);
+//	LCD_voidGoToPosition(1,0);
 //	LCD_voidWriteIntData(randNum);
-	//	LCD_voidSendCommand(LCD_DisplayOFF);
 	USART_voidRXCSetCallBack(RXC);
 	USART_voidInit();
 	USART_voidEnableRXCInterrupt();
@@ -60,10 +64,30 @@ int main(){
 		if(doneFlag==1){
 			doneFlag = 0;
 			if(memcmp(data, "2701", 4) == 0){
-				strcat(successfulAccess, IntToString(randNum, tempStr));
+				strcat(successfulAccess, tempStr);
 				LCD_voidWriteString(successfulAccess);
 				for(u8 i = 4; i < 12; i++){
-					cipher[i-4]= ((successfulAccess[i] - '0') ^ (key[i-4] - '0')) + '0';
+					if(successfulAccess[i] > '9'){
+						successfulAccess[i] = successfulAccess[i] - 'A' + 10;
+					}
+					else{
+						successfulAccess[i] -= '0';
+					}
+					if(key[i-4] > '9'){
+						key[i-4] = key[i-4] - 'A' + 10;
+					}
+					else{
+						key[i-4] -= '0';
+					}
+
+					cipher[i-4]= successfulAccess[i] ^ key[i-4];
+
+					if(cipher[i-4] > 9){
+						cipher[i-4] = cipher[i-4] - 10 +'A';
+					}
+					else{
+						cipher[i-4] += '0';
+					}
 				}
 				cipher[8] = '\0';
 				LCD_voidGoToPosition(1,0);
@@ -129,26 +153,6 @@ u8 Random(u8 lower, u8 upper){
 	return num;
 }
 
-u8* IntToString(s32 anInteger,u8 *str){
-	u32 flag = 0;
-	u32 i = INT_TO_STRING_ARR_SIZE - 1;
-	str[i--] = '\0';
-	if (anInteger < 0) {
-		flag = 1;
-		anInteger = -anInteger;
-	}
-	while (anInteger != 0) {
-		str[i--] = (anInteger % 10) + '0';
-		anInteger /= 10;
-	}
-	if (flag){
-		str[i--] = '-';
-	}
-	i++;
-	return str + i;
-
-}
-
 void RTC_Read_Clock(){
 	I2C_Master_enuSendStartCond();
 	I2C_Master_enuSendSlaveAddressWithWrite(SLAVE_ADDRESS);
@@ -164,5 +168,24 @@ void RTC_Read_Clock(){
 
 u8 ConvertFromRTC(u8 num){
 	return ((num>>4) * 10 + (num&0x0F));
+}
+
+void int2HexStr(unsigned long n, char *outbuf){
+
+	int i = 12;
+	int j = 0;
+
+	do{
+		outbuf[i] = "0123456789ABCDEF"[n % 16];
+		i--;
+		n = n/16;
+	}while( n > 0);
+
+	while( ++i < 13){
+		outbuf[j++] = outbuf[i];
+	}
+
+	outbuf[j] = 0;
+
 }
 
